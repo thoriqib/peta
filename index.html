@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Peta Digital Wilayah Jambi</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: sans-serif;
+      }
+      #map {
+        width: 100%;
+        height: 100vh;
+      }
+      .filter-container {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        z-index: 1000;
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+      }
+      /* Gaya untuk label permanen di atas poligon */
+      .label-sls {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        font-size: 11px;
+        font-weight: bold;
+        color: #ffffff; /* Teks putih agar terlihat di peta satelit */
+        text-shadow:
+          -1px -1px 0 #000,
+          1px -1px 0 #000,
+          -1px 1px 0 #000,
+          1px 1px 0 #000; /* Outline hitam */
+        text-align: center;
+        white-space: nowrap;
+      }
+      /* Gaya untuk Kotak Legenda */
+      .info.legend {
+        background: white;
+        padding: 10px 15px;
+        font-size: 12px;
+        line-height: 1.5em;
+        color: #333;
+        border-radius: 5px;
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+      }
+      .info.legend h4 {
+        margin: 0 0 8px 0;
+        font-size: 14px;
+      }
+      /* Gaya untuk garis warna batas di legenda */
+      .legend-line {
+        width: 20px;
+        display: inline-block;
+        margin-right: 8px;
+        vertical-align: middle;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="filter-container">
+      <h3>Filter Wilayah</h3>
+
+      <label for="filterKecamatan">Kecamatan:</label>
+      <select id="filterKecamatan" style="width: 100%; margin-bottom: 10px">
+        <option value="semua">Semua Kecamatan</option>
+      </select>
+
+      <label for="filterKelurahan">Kelurahan:</label>
+      <select
+        id="filterKelurahan"
+        style="width: 100%; margin-bottom: 10px"
+        disabled
+      >
+        <option value="semua">Semua Kelurahan</option>
+      </select>
+
+      <label for="filterRT">RT / SLS:</label>
+      <select id="filterRT" style="width: 100%; margin-bottom: 15px" disabled>
+        <option value="semua">Semua RT/SLS</option>
+      </select>
+
+      <button onclick="trackLocation()" style="width: 100%">
+        Lacak Lokasi Saya
+      </button>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+      var map = L.map("map").setView([-1.6101, 103.6131], 12);
+
+      L.tileLayer("http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}", {
+        maxZoom: 20,
+        subdomains: ["mt0", "mt1", "mt2", "mt3"],
+        attribution: "© Google",
+      }).addTo(map);
+
+      // 1. MENGATUR URUTAN TUMPUKAN (PANES)
+      map.createPane("paneRT");
+      map.getPane("paneRT").style.zIndex = 401;
+
+      map.createPane("paneKelurahan");
+      map.getPane("paneKelurahan").style.zIndex = 402;
+
+      map.createPane("paneKecamatan");
+      map.getPane("paneKecamatan").style.zIndex = 403;
+
+      // Variabel untuk menyimpan data mentah dan layer
+      var rawDataRT, rawDataKelurahan, rawDataKecamatan;
+      var layerRT, layerKelurahan, layerKecamatan;
+      var strukturWilayah = {};
+
+      var dropdownKecamatan = document.getElementById("filterKecamatan");
+      var dropdownKelurahan = document.getElementById("filterKelurahan");
+      var dropdownRT = document.getElementById("filterRT");
+
+      // Fungsi membangun hierarki dropdown (Tetap menggunakan data RT karena paling lengkap)
+      function bangunHierarkiWilayah(data) {
+        data.features.forEach(function (feature) {
+          var props = feature.properties;
+          var kec = props.nmkec;
+          var kel = props.nmdesa;
+          var rt = props.nmsls;
+
+          if (!kec || !kel || !rt) return;
+
+          if (!strukturWilayah[kec]) strukturWilayah[kec] = {};
+          if (!strukturWilayah[kec][kel]) strukturWilayah[kec][kel] = new Set();
+
+          strukturWilayah[kec][kel].add(rt);
+        });
+
+        Object.keys(strukturWilayah)
+          .sort()
+          .forEach(function (kec) {
+            var option = document.createElement("option");
+            option.value = kec;
+            option.text = kec;
+            dropdownKecamatan.appendChild(option);
+          });
+      }
+
+      // 2. MEMUAT 3 FILE GEOJSON SEKALIGUS
+      Promise.all([
+        fetch("/jambi_sls.geojson").then((res) => res.json()), // File 1: RT
+        fetch("/jambi_kelurahan.geojson").then((res) => res.json()), // File 2: Kelurahan
+        fetch("/jambi_kecamatan.geojson").then((res) => res.json()), // File 3: Kecamatan
+      ])
+        .then(([dataRT, dataKelurahan, dataKecamatan]) => {
+          // Simpan data ke variabel global
+          rawDataRT = dataRT;
+          rawDataKelurahan = dataKelurahan;
+          rawDataKecamatan = dataKecamatan;
+
+          // Bangun dropdown dan render peta awal
+          bangunHierarkiWilayah(dataRT);
+          renderPeta();
+        })
+        .catch((error) => {
+          console.error("Gagal memuat file GeoJSON:", error);
+          alert("Pastikan ketiga file GeoJSON tersedia di server.");
+        });
+
+      // Event Listener Dropdown (Sama seperti sebelumnya)
+      dropdownKecamatan.addEventListener("change", function () {
+        var selectedKec = this.value;
+        dropdownKelurahan.innerHTML =
+          '<option value="semua">Semua Kelurahan</option>';
+        dropdownRT.innerHTML = '<option value="semua">Semua RT/SLS</option>';
+        dropdownRT.disabled = true;
+
+        if (selectedKec === "semua") {
+          dropdownKelurahan.disabled = true;
+        } else {
+          dropdownKelurahan.disabled = false;
+          Object.keys(strukturWilayah[selectedKec])
+            .sort()
+            .forEach(function (kel) {
+              var option = document.createElement("option");
+              option.value = kel;
+              option.text = kel;
+              dropdownKelurahan.appendChild(option);
+            });
+        }
+        renderPeta();
+      });
+
+      dropdownKelurahan.addEventListener("change", function () {
+        var selectedKec = dropdownKecamatan.value;
+        var selectedKel = this.value;
+        dropdownRT.innerHTML = '<option value="semua">Semua RT/SLS</option>';
+
+        if (selectedKel === "semua") {
+          dropdownRT.disabled = true;
+        } else {
+          dropdownRT.disabled = false;
+          Array.from(strukturWilayah[selectedKec][selectedKel])
+            .sort()
+            .forEach(function (rt) {
+              var option = document.createElement("option");
+              option.value = rt;
+              option.text = rt;
+              dropdownRT.appendChild(option);
+            });
+        }
+        renderPeta();
+      });
+
+      dropdownRT.addEventListener("change", function () {
+        renderPeta();
+      });
+
+      // 3. FUNGSI RENDER PETA MULTI-LAYER
+      function renderPeta() {
+        // Hapus layer lama jika ada
+        if (layerRT) map.removeLayer(layerRT);
+        if (layerKelurahan) map.removeLayer(layerKelurahan);
+        if (layerKecamatan) map.removeLayer(layerKecamatan);
+
+        var selectedKec = dropdownKecamatan.value;
+        var selectedKel = dropdownKelurahan.value;
+        var selectedRT = dropdownRT.value;
+
+        // --- RENDER LAYER KECAMATAN ---
+        layerKecamatan = L.geoJSON(rawDataKecamatan, {
+          pane: "paneKecamatan",
+          filter: function (feature) {
+            return (
+              selectedKec === "semua" ||
+              feature.properties.nmkec === selectedKec
+            );
+          },
+          style: { color: "#8e44ad", weight: 3, fillOpacity: 0 }, // Transparan, hanya garis tebal ungu
+          interactive: false, // Agar klik tembus ke layer di bawahnya
+        }).addTo(map);
+
+        // --- RENDER LAYER KELURAHAN ---
+        layerKelurahan = L.geoJSON(rawDataKelurahan, {
+          pane: "paneKelurahan",
+          filter: function (feature) {
+            var matchKecamatan =
+              selectedKec === "semua" ||
+              feature.properties.nmkec === selectedKec;
+            var matchKelurahan =
+              selectedKel === "semua" ||
+              feature.properties.nmdesa === selectedKel;
+            return matchKecamatan && matchKelurahan;
+          },
+          style: { color: "#27ae60", weight: 2, fillOpacity: 0 }, // Transparan, garis hijau
+          interactive: false,
+        }).addTo(map);
+
+        // --- RENDER LAYER RT/SLS ---
+        layerRT = L.geoJSON(rawDataRT, {
+          pane: "paneRT",
+          filter: function (feature) {
+            var matchKecamatan =
+              selectedKec === "semua" ||
+              feature.properties.nmkec === selectedKec;
+            var matchKelurahan =
+              selectedKel === "semua" ||
+              feature.properties.nmdesa === selectedKel;
+            var matchRT =
+              selectedRT === "semua" || feature.properties.nmsls === selectedRT;
+            return matchKecamatan && matchKelurahan && matchRT;
+          },
+          style: {
+            color: "#f39c12",
+            weight: 1,
+            fillColor: "#2980b9",
+            fillOpacity: 0.15,
+          },
+          onEachFeature: function (feature, layer) {
+            var p = feature.properties;
+            var popupContent = `
+                <div style="text-align: center; font-family: sans-serif;">
+                    <div style="font-weight: bold; font-size: 14px;">${p.idsubsls || "-"}</div>
+                    <div style="font-weight: bold; font-size: 13px; color: #d35400;">
+                        ${p.nmsls || "-"} Sub ${p.kdsubsls || "-"}
+                    </div>
+                    <hr style="margin: 8px 0; border: 0; border-top: 1px solid #ccc;">
+                    <div style="text-align: left; font-size: 12px;">
+                        <b>Kecamatan:</b> ${p.nmkec || "-"}<br>
+                        <b>Kelurahan:</b> ${p.nmdesa || "-"}
+                    </div>
+                </div>
+            `;
+            layer.bindPopup(popupContent);
+          },
+        }).addTo(map);
+
+        // Atur zoom fokus ke layer yang difilter (Gunakan layer terkecil yang aktif)
+        var activeLayer =
+          selectedRT !== "semua"
+            ? layerRT
+            : selectedKel !== "semua"
+              ? layerKelurahan
+              : selectedKec !== "semua"
+                ? layerKecamatan
+                : layerKecamatan;
+
+        if (activeLayer.getBounds().isValid()) {
+          map.fitBounds(activeLayer.getBounds());
+        }
+      }
+
+      // ==========================================
+      // MEMBUAT LEGENDA PETA DI POJOK KANAN BAWAH
+      // ==========================================
+      var legend = L.control({ position: "bottomright" });
+
+      legend.onAdd = function (map) {
+        var div = L.DomUtil.create("div", "info legend");
+
+        div.innerHTML += "<h4>Legenda Peta</h4>";
+
+        // Anda bisa menyesuaikan ketebalan dan warna di sini
+        div.innerHTML +=
+          '<div><span class="legend-line" style="background: #8e44ad; height: 3px;"></span> Batas Kecamatan</div>';
+        div.innerHTML +=
+          '<div><span class="legend-line" style="background: #27ae60; height: 2px;"></span> Batas Kelurahan</div>';
+        div.innerHTML +=
+          '<div><span class="legend-line" style="background: #f39c12; height: 1.5px;"></span> Batas RT/SLS</div>';
+
+        return div;
+      };
+
+      legend.addTo(map);
+      function trackLocation() {
+        map.locate({ setView: true, maxZoom: 18 });
+      }
+
+      map.on("locationfound", function (e) {
+        var radius = e.accuracy;
+        L.marker(e.latlng)
+          .addTo(map)
+          .bindPopup(
+            "Lokasi Anda berada dalam radius " + Math.round(radius) + " meter.",
+          )
+          .openPopup();
+        L.circle(e.latlng, radius).addTo(map);
+      });
+
+      map.on("locationerror", function (e) {
+        alert("Gagal mengakses lokasi: " + e.message);
+      });
+    </script>
+  </body>
+</html>
