@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Peta Digital Wilayah Jambi</title>
+    <title>Peta Wilayah Kerja Statistik Kota Jambi</title>
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -252,9 +252,9 @@
 
       // 2. MEMUAT 3 FILE GEOJSON SEKALIGUS
       Promise.all([
-        fetch("/jambi_sls.geojson").then((res) => res.json()), // File 1: RT
-        fetch("/jambi_kelurahan.geojson").then((res) => res.json()), // File 2: Kelurahan
-        fetch("/jambi_kecamatan.geojson").then((res) => res.json()), // File 3: Kecamatan
+        fetch("ambil_peta.php?tipe=rt").then((res) => res.json()),
+        fetch("ambil_peta.php?tipe=kelurahan").then((res) => res.json()),
+        fetch("ambil_peta.php?tipe=kecamatan").then((res) => res.json()),
       ])
         .then(([dataRT, dataKelurahan, dataKecamatan]) => {
           // Simpan data ke variabel global
