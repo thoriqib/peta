@@ -127,9 +127,62 @@
         width: 200px;
         display: none; /* Menyembunyikan menu saat pertama kali dimuat */
       }
+
+      /* Gaya untuk Overlay Layar Penuh */
+      .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(
+          255,
+          255,
+          255,
+          0.9
+        ); /* Latar belakang putih transparan */
+        z-index: 9999; /* Angka tinggi agar berada di atas peta, filter, dan legenda */
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        transition: opacity 0.3s ease;
+      }
+
+      /* Animasi Spinner Berputar */
+      .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #2980b9; /* Warna biru serasi dengan tema filter */
+        border-radius: 50%;
+        width: 45px;
+        height: 45px;
+        animation: spin 1s linear infinite;
+        margin-bottom: 15px;
+      }
+
+      .loading-text {
+        font-family: sans-serif;
+        font-size: 14px;
+        font-weight: bold;
+        color: #333333;
+      }
+
+      /* Pola Gerakan Putar */
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
     </style>
   </head>
   <body>
+    <div id="loadingOverlay" class="loading-overlay">
+      <div class="spinner"></div>
+      <div class="loading-text">Memuat Peta Wilayah Kota Jambi...</div>
+    </div>
     <button class="location-btn" onclick="trackLocation()">
       📍 Lacak Lokasi Saya
     </button>
@@ -251,24 +304,46 @@
       }
 
       // 2. MEMUAT 3 FILE GEOJSON SEKALIGUS
+      // MEMUAT DATA MENGGUNAKAN PROXY API
       Promise.all([
-        fetch("ambil_peta.php?tipe=rt").then((res) => res.json()),
-        fetch("ambil_peta.php?tipe=kelurahan").then((res) => res.json()),
-        fetch("ambil_peta.php?tipe=kecamatan").then((res) => res.json()),
+        fetch("ambil_peta.php?tipe=rt").then((res) => {
+          if (!res.ok) throw new Error("Gagal mengambil data RT");
+          return res.json();
+        }),
+        fetch("ambil_peta.php?tipe=kelurahan").then((res) => {
+          if (!res.ok) throw new Error("Gagal mengambil data Kelurahan");
+          return res.json();
+        }),
+        fetch("ambil_peta.php?tipe=kecamatan").then((res) => {
+          if (!res.ok) throw new Error("Gagal mengambil data Kecamatan");
+          return res.json();
+        }),
       ])
         .then(([dataRT, dataKelurahan, dataKecamatan]) => {
-          // Simpan data ke variabel global
+          // 1. Simpan ke variabel global
           rawDataRT = dataRT;
           rawDataKelurahan = dataKelurahan;
           rawDataKecamatan = dataKecamatan;
 
-          // Bangun dropdown dan render peta awal
+          // 2. Bangun komponen peta awal
           bangunHierarkiWilayah(dataRT);
           renderPeta();
+
+          // 3. SEMBUNYIKAN LOADING OVERLAY setelah semua selesai dirender
+          var loader = document.getElementById("loadingOverlay");
+          loader.style.opacity = "0";
+          setTimeout(function () {
+            loader.style.display = "none"; // Diberi jeda agar efek transisi opacity berjalan mulus
+          }, 300);
         })
         .catch((error) => {
-          console.error("Gagal memuat file GeoJSON:", error);
-          alert("Pastikan ketiga file GeoJSON tersedia di server.");
+          console.error("Detail Error:", error);
+          alert(
+            "Terjadi kesalahan saat memuat peta. Silakan periksa koneksi atau hak akses file.",
+          );
+
+          // Tetap sembunyikan loader agar halaman tidak membeku saat error
+          document.getElementById("loadingOverlay").style.display = "none";
         });
 
       // Event Listener Dropdown (Sama seperti sebelumnya)
