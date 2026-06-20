@@ -65,40 +65,138 @@
         margin-right: 8px;
         vertical-align: middle;
       }
+
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: sans-serif;
+      }
+      #map {
+        width: 100%;
+        height: 100vh;
+      }
+
+      /* Tombol Lacak Lokasi Mandiri */
+      .location-btn {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        z-index: 1000;
+        background: #ffffff;
+        border: 1px solid #ccc;
+        padding: 10px 15px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: bold;
+        font-size: 12px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+        transition: background 0.2s;
+      }
+      .location-btn:hover {
+        background: #f4f4f4;
+      }
+
+      /* Tombol untuk Membuka/Menutup Panel Filter */
+      .filter-toggle-btn {
+        position: absolute;
+        top: 70px; /* Diletakkan tepat di bawah tombol lokasi */
+        right: 20px;
+        z-index: 1000;
+        background: #2980b9;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: bold;
+        font-size: 12px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+        transition: background 0.2s;
+      }
+
+      /* Kotak Panel Filter Utama */
+      .filter-container {
+        position: absolute;
+        top: 120px; /* Muncul di bawah tombol toggle filter */
+        right: 20px;
+        z-index: 1000;
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        width: 200px;
+        display: none; /* Menyembunyikan menu saat pertama kali dimuat */
+      }
     </style>
   </head>
   <body>
-    <div class="filter-container">
-      <h3>Filter Wilayah</h3>
+    <button class="location-btn" onclick="trackLocation()">
+      📍 Lacak Lokasi Saya
+    </button>
 
-      <label for="filterKecamatan">Kecamatan:</label>
-      <select id="filterKecamatan" style="width: 100%; margin-bottom: 10px">
+    <button class="filter-toggle-btn" onclick="toggleFilterMenu()">
+      🔍 Filter Wilayah
+    </button>
+
+    <div id="filterMenu" class="filter-container">
+      <h4 style="margin-top: 0; margin-bottom: 12px; color: #333">
+        Filter Wilayah
+      </h4>
+
+      <label
+        for="filterKecamatan"
+        style="font-size: 11px; font-weight: bold; color: #666"
+        >Kecamatan:</label
+      >
+      <select
+        id="filterKecamatan"
+        style="width: 100%; margin-bottom: 10px; padding: 4px"
+      >
         <option value="semua">Semua Kecamatan</option>
       </select>
 
-      <label for="filterKelurahan">Kelurahan:</label>
+      <label
+        for="filterKelurahan"
+        style="font-size: 11px; font-weight: bold; color: #666"
+        >Kelurahan:</label
+      >
       <select
         id="filterKelurahan"
-        style="width: 100%; margin-bottom: 10px"
+        style="width: 100%; margin-bottom: 10px; padding: 4px"
         disabled
       >
         <option value="semua">Semua Kelurahan</option>
       </select>
 
-      <label for="filterRT">RT / SLS:</label>
-      <select id="filterRT" style="width: 100%; margin-bottom: 15px" disabled>
+      <label
+        for="filterRT"
+        style="font-size: 11px; font-weight: bold; color: #666"
+        >RT / SLS:</label
+      >
+      <select id="filterRT" style="width: 100%; padding: 4px" disabled>
         <option value="semua">Semua RT/SLS</option>
       </select>
-
-      <button onclick="trackLocation()" style="width: 100%">
-        Lacak Lokasi Saya
-      </button>
     </div>
 
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
+      function toggleFilterMenu() {
+        var menu = document.getElementById("filterMenu");
+        var btn = document.querySelector(".filter-toggle-btn");
+
+        // Mengecek status tampilan menu saat ini
+        if (menu.style.display === "none" || menu.style.display === "") {
+          menu.style.display = "block"; // Tampilkan menu
+          btn.style.background = "#e74c3c"; // Ubah tombol menjadi warna merah tanda menutup
+          btn.innerHTML = "❌ Tutup Filter";
+        } else {
+          menu.style.display = "none"; // Sembunyikan menu
+          btn.style.background = "#2980b9"; // Kembalikan ke warna biru
+          btn.innerHTML = "🔍 Filter Wilayah";
+        }
+      }
       var map = L.map("map").setView([-1.6101, 103.6131], 12);
 
       L.tileLayer("http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}", {
